@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TicTacToe</title>
+    <link rel="stylesheet" href="/static/bootstrap/bootstrap.min.css"/>
+    <style>
+        .empty {
+            background: #dfd;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<table class="table table-striped" style="max-width: 500px;">
+    <thead>
+    <tr>
+        <th scope="col">#</th>
+        <th scope="col">O</th>
+        <th scope="col">X</th>
+    </tr>
+    </thead>
+    <tbody>
+    {#    {% if room_list %}#}
+    {#        {% for room in room_list %}#}
+    {#            <tr>#}
+    {#                <th scope="row">{{ room.id }}</th>#}
+    {#                {% if room.player_1 is None %}#}
+    {#                    <td class="empty" onclick="window.location='?room={{ room.id }}&side=1'">Join</td>#}
+    {#                {% else %}#}
+    {#                    <td>{{ room.player_1.username }}</td>#}
+    {#                {% endif %}#}
+    {#                {% if room.player_2 is None %}#}
+    {#                    <td class="empty" onclick="window.location='?room={{ room.id }}&side=2'">Join</td>#}
+    {#                {% else %}#}
+    {#                    <td>{{ room.player_2.username }}</td>#}
+    {#                {% endif %}#}
+    {#            </tr>#}
+    {#        {% endfor %}#}
+    {#    {% else %}#}
+    {#        <tr>#}
+    {#            <td colspan="3">#}
+    {#                <button class="btn w-100" onclick="window.location = '/tool/?create_room_and_join'">New Room</button>#}
+    {#            </td>#}
+    {#        </tr>#}
+    {#    {% endif %}#}
+    </tbody>
+</table>
+<script>
+    let rooms = [];
+    let tbody = document.getElementsByTagName('tbody')[0];
+
+    function draw_room(room) {
+        let tr = document.createElement('tr');
+        let th = document.createElement('th');
+        th.innerText = room['id'];
+        tr.appendChild(th);
+
+        for (let player_id of '12') {
+            let td = document.createElement('td');
+            if (room[`player_${player_id}`] == null) {
+                td.classList.add('empty');
+                td.onclick = () => window.location = `?room=${room["id"]}&side=${player_id}`;
+                td.innerText = 'Join';
+            } else {
+                td.innerText = room[`player_${player_id}`];
+            }
+            tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+    }
+
+    function draw_create_button() {
+        let tr = document.createElement('tr');
+
+        let td = document.createElement('td');
+        td.colSpan = 3;
+        let button = document.createElement('button');
+        button.classList.add('btn', 'w-100');
+        button.onclick = () => window.location = '/tool/?create_room_and_join';
+        button.innerText = 'Create new room';
+
+        td.appendChild(button);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
+
+    function ajax_create_room() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.open("GET", `/ajax/?create_room`, true);
+        xhttp.send();
+    }
+
+    function ajax_update_rooms() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+
+                let tmp_rooms = JSON.parse(this.responseText);
+
+                if (JSON.stringify(rooms) !== JSON.stringify(tmp_rooms)) {
+                    tbody.innerHTML = '';
+                    for (let room of tmp_rooms)
+                        draw_room(room);
+                    draw_create_button();
+                }
+
+                rooms = tmp_rooms;
+
+                if (tbody.children.length === 0)
+                    draw_create_button();
+            }
+        };
+        xhttp.open("GET", `/ajax/?get_rooms`, true);
+        xhttp.send();
+    }
+
+    ajax_update_rooms();
+    setInterval(ajax_update_rooms, 500);
+</script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playing TicTacToe</title>
+    <link rel="stylesheet" href="/static/bootstrap/bootstrap.min.css"/>
+    <link rel="stylesheet" href="/static/box.css"/>
+</head>
+<style>
+    body, html {
+        min-height: 100%;
+    }
+
+    canvas {
+        transform: translate(-50%, 10%);
+        left: 50%;
+        position: relative;
+    }
+
+    .turning::after {
+        content: "  <===";
+        color: indianred;
+    }
+
+    .cx {
+        transform: translate(-50%);
+        left: 50%;
+    }
+
+    .cxy {
+        transform: translate(-50%, -50%);
+        left: 50%;
+        top: 50%;
+    }
+
+    #vote-box {
+        background: rgba(200, 200, 200, .5);
+        backdrop-filter: blur(2px);
+        width: 200px;
+        height: 100px;
+        position: fixed;
+    }
+
+    .loader {
+        border: 4px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 4px solid #888;
+        width: 20px;
+        height: 20px;
+        -webkit-animation: spin 2s linear infinite; /* Safari */
+        animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+<body>
+<div class="container">
+    <div class="row">
+        <div class="col-md-9">
+            <canvas width="300px" height="300px" class="mb-5"></canvas>
+        </div>
+        <div class="col-md pt-3">
+            <button class="btn" onclick="leave_room()">Leave</button>
+            <hr/>
+            <div>
+                <a id="player-1"></a>
+                <div></div>
+            </div>
+            <hr/>
+            <div>
+                <a id="player-2"></a>
+                <a></a>
+            </div>
+            <hr/>
+        </div>
+    </div>
+</div>
+<div class="box-small">
+    <div class="container">
+        <div class="col-md text-center">
+            Again?
+        </div>
+        <hr/>
+        <div class="row">
+            <div class="col-md box-button" onclick="vote(true)">Yes</div>
+            <div class="col-md box-button" onclick="vote(false)">No</div>
+        </div>
+    </div>
+</div>
+<div id="msg"></div>
+
+<script src="/static/game_canvas.js"></script>
+<script>
+    // Reset every round
+    let my_id;
+    let opponent_id;
+
+    let board_state;
+    let winner;
+    let board_blocked;
+    let end_of_round;
+
+    let ajax_refresh_interval;
+    let ajax_refresh_2_interval;
+
+    let canvas_on_press_function;
+
+    // Not reset every round
+    let turn_counter = 0;
+
+    let players_display = {'1': document.getElementById('player-1'), '2': document.getElementById('player-2')};
+    let players_display_after = {};
+
+    for (let player in players_display)
+        players_display_after[player] = players_display[player].parentElement.lastElementChild;
+
+    // Functions
+    (function () {
+        init()
+    })();
+
+    function init() {
+        document.getElementById('msg').innerHTML = turn_counter.toString();
+        my_id = '{{ my_id }}';
+        opponent_id = (my_id === '1' ? '2' : '1');
+
+        board_state = undefined;
+        winner = undefined;
+        board_blocked = false;
+        end_of_round = false;
+
+        ajax_draw_board();
+        ajax_refresh();
+        ajax_refresh_interval = setInterval(ajax_refresh, 800);
+        ajax_refresh_2_interval = undefined;
+
+        canvas_on_press_function = undefined;
+    }
+
+    function leave_room() {
+        window.location.href = '/tool/?leave';
+    }
+
+    function vote(yes) {
+        if (yes === true) {
+            ajax_rematch();
+            document.getElementsByClassName('box-small')[0].classList.remove('show');
+            {#document.getElementById('vote-box').classList.add('d-none');#}
+        } else if (yes === false) {
+            leave_room();
+        }
+    }
+
+    function show_vote_box() {
+        document.getElementsByClassName('box-small')[0].classList.add('show');
+        {#document.getElementById('vote-box').classList.remove('d-none');#}
+    }
+
+    function ajax_draw_board() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+
+                let data = JSON.parse(this.responseText);
+                board_state = data['board_state'];
+                winner = data['winner'];
+                draw_board();
+
+                if (winner !== '0') {
+                    if (winner === '1' || winner === '2') {
+                        alert(players_display[winner].innerText + ' has won!');
+                    } else {
+                        alert('Draw');
+                    }
+                    end_of_round = true;
+                    board_blocked = true;
+                    clearInterval(ajax_refresh_interval);
+                    if (!ajax_refresh_2_interval)
+                        ajax_refresh_2_interval = setInterval(ajax_refresh_2, 800);
+                    show_vote_box();
+                }
+            }
+        };
+        xhttp.open("GET", "/ajax/?get_board_state", true);
+        xhttp.send();
+    }
+
+    function restart() {
+        clearInterval(ajax_refresh_2_interval);
+        for (let i in players_display_after)
+            if (players_display_after.hasOwnProperty(i))
+                players_display_after[i].innerText = '';
+        init();
+        if (turn_counter % 2 === 0) {
+            [my_id, opponent_id] = [opponent_id, my_id]
+        }
+        turn_counter++;
+    }
+
+    function ajax_rematch() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.responseText.length > 0) {
+                restart();
+            }
+        };
+        xhttp.open("GET", "/ajax/?rematch", true);
+        xhttp.send();
+    }
+
+    function wait_for_opponent() {
+        board_blocked = true;
+        canvas_on_press_function = () => alert('Waiting for opponent');
+        players_display_after[opponent_id].innerHTML = "<div class='loader'></div>";
+    }
+
+    function ajax_refresh() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+                let data = JSON.parse(this.responseText);
+
+                for (let i = 1; i <= 2; i++) {
+                    let si = i.toString();
+                    let e = players_display[si];
+                    e.innerHTML = `Player <b>${si === '1' ? 'O' : 'X'}</b> - ` + (data['player_' + si] ? data['player_' + si] : "Empty");
+                    if (parseInt(data['turn']) === i)
+                        e.classList.add('turning');
+                    else
+                        e.classList.remove('turning')
+                }
+
+                if (data['player_' + opponent_id] === null) {
+                    wait_for_opponent();
+                    return;
+                } else {
+                    canvas_on_press_function = undefined;
+                }
+
+                if (end_of_round === true) {
+                    return;
+                }
+
+                if (data['turn'] === my_id) {
+                    board_blocked = false;
+                    ajax_draw_board();
+                    canvas_on_press_function = undefined;
+                } else {
+                    board_blocked = true;
+                    canvas_on_press_function = () => alert('Not you turn');
+                }
+            }
+        };
+        xhttp.open("GET", "/ajax/?get_players", true);
+        xhttp.send();
+    }
+
+    function ajax_refresh_2() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+                let data = JSON.parse(this.responseText);
+                console.log(data);
+                if (data['ready']) {
+                    restart();
+                    return;
+                }
+                for (let i of '12') {
+                    if (data[i])
+                        players_display_after[i].innerHTML = "✓";
+                    else if (!players_display_after[i].innerHTML)
+                        players_display_after[i].innerHTML = "<div class='loader'></div>";
+                }
+            }
+        };
+        xhttp.open("GET", `/ajax/?rematch_refresh`, true);
+        xhttp.send();
+    }
+
+    function ajax_move(x, y) {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+                ajax_draw_board();
+            }
+        };
+        xhttp.open("GET", `/ajax?x=${x}&y=${y}`, true);
+        xhttp.send();
+    }
+
+
+    canvas.onmousedown = function (event) {
+
+        if (canvas_on_press_function)
+            canvas_on_press_function();
+
+        if (board_blocked)
+            return;
+
+        let pos = '';
+
+        for (let i = 0; i < 3; i++) if (event.offsetX < width / 3 * (i + 1)) {
+            pos += i;
+            break;
+        }
+
+        for (let i = 0; i < 3; i++) if (event.offsetY < height / 3 * (i + 1)) {
+            pos += i;
+            break;
+        }
+
+        let x = pos.charAt(0);
+        let y = pos.charAt(1);
+
+        let i = parseInt(x) + (parseInt(y) * 3);
+
+        if (board_state[i] !== '0') {
+            alert('That place is occupied');
+            return;
+        }
+
+        ajax_move(pos.charAt(0), pos.charAt(1));
+        board_blocked = true;
+    }
+
+
+</script>
+</body>
+</html>
