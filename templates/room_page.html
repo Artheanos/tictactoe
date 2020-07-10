@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Room nr {{ room_id }}</title>
+    <link href="https://getbootstrap.com/docs/4.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .main-div {
+            display: flex;
+            margin: 10px;
+            max-width: 1200px;
+        }
+
+        .user-table {
+            max-width: 300px;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+<div class="main-div flex-wrap flex-xl-nowrap">
+    <div style="">
+        <canvas id="board-canvas"></canvas>
+    </div>
+    <div class="w-100">
+        <table class="table table-striped user-table">
+            <thead>
+            <tr>
+                <th>Username</th>
+            </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+    <div id="my-display" style="width: 200px; height: 20px; background: black">
+    </div>
+</div>
+</body>
+
+<script>
+    const myDisplay = document.getElementById('my-display');
+    let canvas = document.getElementById('board-canvas');
+    canvas.width = 600;
+    canvas.height = 600;
+    let ctx = canvas.getContext('2d');
+    ctx.lineWidth = 5;
+
+    for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(canvas.width * i / 3, 0);
+        ctx.lineTo(canvas.width * i / 3, canvas.height);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height * i / 3);
+        ctx.lineTo(canvas.width, canvas.height * i / 3);
+        ctx.stroke();
+    }
+
+    function randint(a, b) {
+        return (Math.random() * (b - a) + a) >> 0;
+    }
+
+    function random_color() {
+        return `rgb(${randint(0, 255)}, ${randint(0, 255)}, ${randint(0, 255)})`;
+    }
+
+    function color_tile(x, y) {
+        ctx.fillRect(
+            x * canvas.width / 3,
+            y * canvas.height / 3,
+            canvas.width / 3,
+            canvas.height / 3
+        );
+    }
+
+    function draw_circle(x, y) {
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        let coords = [(2 * x + 1) * canvas.width / 6, (2 * y + 1) * canvas.height / 6];
+        let margin = 20;
+        ctx.arc(...coords, canvas.width / 6 - margin, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    function draw_cross(x, y) {
+        ctx.lineWidth = 3;
+        {#ctx.beginPath();#}
+        let margin = 20;
+        let coords = [
+            x * canvas.width / 3 + margin,
+            y * canvas.height / 3 + margin,
+            (x + 1) * canvas.width / 3 - margin,
+            (y + 1) * canvas.height / 3 - margin,
+        ];
+        ctx.moveTo(
+            coords[0],
+            coords[1],
+        );
+        ctx.lineTo(
+            coords[2],
+            coords[3],
+        );
+        ctx.stroke();
+
+        ctx.moveTo(
+            coords[2],
+            coords[1],
+        );
+        ctx.lineTo(
+            coords[0],
+            coords[3],
+        );
+        ctx.stroke();
+    }
+</script>
+
+<script>
+    let user_list = [];
+    let role = null;
+    let my_turn = false;
+    let my_username = '{{ username }}';
+    let opponent = null;
+
+    isMe = (s) => (s === my_username);
+
+    function endState() {
+        myDisplay.style.background = 'red';
+    }
+
+    function startState() {
+        myDisplay.style.background = 'black';
+    }
+
+    function wonState() {
+        myDisplay.style.background = 'yellow';
+    }
+
+    function votingState() {
+        myDisplay.style.background = 'blue';
+    }
+
+    function waitingForPlayerState() {
+        myDisplay.style.background = 'grey';
+    }
+
+    function move(x, y) {
+        if ((role === 1) === my_turn) {
+            draw_cross(x, y);
+        } else {
+            draw_circle(x, y);
+        }
+        my_turn = !my_turn;
+    }
+
+    const roomSocket = new WebSocket(
+        {#("https:" ? "wss://" : "ws://")#}
+        'ws://'
+        + window.location.host
+        + '/ws/room/' + {{ room_id }} +'/'
+    );
+
+    let tbody = document.getElementsByTagName('tbody')[0];
+
+    function addRow(x) {
+        user_list.push(x);
+        let newRow = document.createElement('tr');
+        let newCell = document.createElement('td');
+        newCell.textContent = x;
+        newRow.append(newCell);
+        tbody.append(newRow);
+    }
+
+    function removeRow(x) {
+        user_list.splice(user_list.indexOf(x), 1);
+        for (let i of tbody.children)
+            if (i.firstElementChild.textContent === x) {
+                i.remove();
+                return
+            }
+    }
+
+    roomSocket.onmessage = function (e) {
+        let data = JSON.parse(e.data);
+        console.log(data);
+        if (typeof data.message == "string") {
+            switch (data.message) {
+                case 'refresh':
+                    return;
+                case 'joined':
+                    addRow(data.username);
+                    return;
+                case 'quit':
+                    removeRow(data.username);
+                    return;
+                default:
+                    break;
+            }
+        } else {
+            // Init message
+            if ('user_list' in data.message) {
+                let user_list_ = data.message['user_list'];
+                tbody.innerHTML = '';
+                for (let user of user_list_) {
+                    addRow(user);
+                }
+                role = data.message['role'];
+                my_turn = data.message['your_turn'];
+                let state = data.message['state'];
+                for (let i = 0; i < state.length; i++) {
+                    if (state[i] === '1') {
+                        draw_cross(i % 3, i / 3 >> 0);
+                    } else if (state[i] === '2') {
+                        draw_circle(i % 3, i / 3 >> 0);
+                    }
+                }
+            } else if ('move' in data.message) {
+                let pos = data.message['move'];
+                if ('winner' in data.message) {
+                    wonState();
+                    alert(`${data.message['winner']} won!`);
+                    move(...pos);
+                    return;
+                }
+                if (isMe(data.username)) {
+                    if (pos === 'CellNotEmpty')
+                        alert(pos);
+                    else {
+                        move(...pos);
+                        endState();
+                    }
+                } else {
+                    if (pos === 'CellNotEmpty') {
+                        // pass
+                    } else {
+                        move(...pos);
+                        startState();
+                    }
+                }
+            }
+        }
+    }
+
+    canvas.onmousedown = function (e) {
+        if (e.button !== 0)
+            return;
+
+        e.preventDefault();
+
+        if (!my_turn)
+            return;
+
+        let x = (e.offsetX / (canvas.width / 3)) >> 0;
+        let y = (e.offsetY / (canvas.height / 3)) >> 0;
+
+        roomSocket.send(JSON.stringify(
+            {
+                'header': 'move',
+                'message': [x, y],
+            }
+        ));
+    }
+</script>
+<script>
+</script>
+</html>

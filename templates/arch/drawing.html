@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link href="https://getbootstrap.com/docs/4.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<table class="table table-striped" id="main-table">
+    <thead>
+    <tr>
+        <th scope="col">#</th>
+        <th scope="col">Username</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <th scope="col" colspan="2">LOADING...</th>
+    </tr>
+    </tbody>
+</table>
+</body>
+<script>
+    // table
+
+    function display_users() {
+        if (users === null) {
+            return;
+        }
+
+        let tbody = table.getElementsByTagName('tbody')[0];
+        let new_tbody = '';
+        for (let i of users) {
+            new_tbody += '<tr>';
+            new_tbody += '<td>' + i['pk'] + '</td>';
+            new_tbody += '<td>' + i['fields']['name'] + '</td>';
+            new_tbody += '</tr>';
+        }
+        tbody.innerHTML = new_tbody;
+    }
+
+    function refresh_users() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+                users = JSON.parse(this.responseText);
+                display_users();
+            }
+        };
+        xhttp.timeout = 4000;
+        xhttp.open("GET", "/my_api?users", true);
+        xhttp.send();
+    }
+
+    const chatSocket = new WebSocket(
+        'ws://'
+        + window.location.host
+        + '/ws/mainapp/'
+    );
+
+    let table = document.getElementById('main-table');
+    let users = null;
+
+    chatSocket.onmessage = function (e) {
+        const data = JSON.parse(e.data);
+        if (data.message === 'refresh') {
+            refresh_users();
+            return;
+        }
+
+        if (data.message === 'md') {
+            e.preventDefault();
+            ctx.lineWidth = 5;
+            drawing = true;
+            ctx.beginPath();
+        }
+
+        let instructions = JSON.parse(data.message);
+        if (instructions[0] === 's') {
+            my_stroke(...instructions.splice(1));
+        }
+        if (instructions[0] === 'mu') {
+            drawing = false;
+            first_stroke = true;
+            ctx.lineTo(...instructions.splice(1));
+            ctx.stroke();
+        }
+        if (instructions[0] === 'b')
+            ball(...instructions.splice(1));
+    };
+
+    chatSocket.onclose = function (e) {
+        console.error('Chat socket closed unexpectedly');
+    };
+
+    //canvas
+
+    let canvas = document.createElement('canvas');
+    document.body.append(canvas);
+    canvas.classList.add('border', 'border-dark');
+
+    canvas.width = 300;
+    canvas.height = 300;
+    let ctx = canvas.getContext('2d');
+
+    let ball_radius = 10;
+
+    function ball(x, y) {
+        ctx.beginPath();
+        ctx.arc(x, y, ball_radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    let first_stroke = true;
+    let drawing = false;
+    let lol = 0;
+
+    function my_stroke(x, y) {
+        if (first_stroke) {
+            moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+            if ((lol = (lol + 1) % 3) === 0) {
+                ctx.stroke();
+            }
+        }
+
+        first_stroke = false;
+    }
+
+    canvas.onmousemove = function (e) {
+        if (drawing) {
+            if ((lol = (lol + 1) % 3) === 0) {
+                chatSocket.send(JSON.stringify(['b', e.offsetX, e.offsetY]));
+            }
+        }
+    }
+
+    canvas.onmousedown = function (e) {
+        drawing = true;
+        chatSocket.send(JSON.stringify(['b', e.offsetX, e.offsetY]));
+        {#chatSocket.send('md');#}
+    }
+
+    document.onmouseup = function (e) {
+        drawing = false;
+        {#chatSocket.send(JSON.stringify(['mu', e.offsetX, e.offsetY]));#}
+    }
+</script>
+</html>

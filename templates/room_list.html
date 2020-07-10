@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Rooms</title>
+    <link href="https://getbootstrap.com/docs/4.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .room-line {
+            transition-duration: 0.5s;
+            cursor: pointer;
+        }
+
+        .room-line:hover {
+            background: #ddd !important;
+            transform: scale(1.1);
+            transition-duration: 0.2s;
+        }
+    </style>
+</head>
+<body>
+<table class="table table-striped" id="main-table" style="width: 400px; margin: auto">
+    <thead>
+    <tr>
+        <th scope="col">ID</th>
+        <th scope="col">Users</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for room in rooms %}
+        <tr class="room-line" onclick="window.location='/room/{{ room.id }}'">
+            <td>{{ room.id }}</td>
+            <td>{{ room.dis }}</td>
+        </tr>
+    {% endfor %}
+
+    </tbody>
+</table>
+</body>
+<script>
+    const listSocket = new WebSocket(
+        'ws://'
+        + window.location.host
+        + '/ws/rooms/'
+    );
+
+    listSocket.onmessage = console.log;
+
+    {#function refreshTable() {#}
+    {#    listSocket.send('refresh');#}
+    {# } #}
+
+    {#let refreshInterval = setInterval(refreshTable, 2000);#}
+    {#listSocket.onmessage = ev => console.log(ev);#}
+</script>
+</html>

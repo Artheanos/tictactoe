@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link href="https://getbootstrap.com/docs/4.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<table class="table table-striped" id="main-table">
+    <thead>
+    <tr>
+        <th scope="col">#</th>
+        <th scope="col">Username</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <th scope="col" colspan="2">LOADING...</th>
+    </tr>
+    </tbody>
+</table>
+</body>
+<div id="user-">
+    Start typing!<br/><a><b>Delete Key</b> - Delete whole message</a>
+</div>
+<script>
+    // table
+
+    function display_users() {
+        if (users === null) {
+            return;
+        }
+
+        let tbody = table.getElementsByTagName('tbody')[0];
+        let new_tbody = '';
+        for (let i of users) {
+            new_tbody += '<tr>';
+            new_tbody += '<td>' + i['pk'] + '</td>';
+            new_tbody += '<td>' + i['fields']['name'] + '</td>';
+            new_tbody += '</tr>';
+        }
+        tbody.innerHTML = new_tbody;
+    }
+
+    function refresh_users() {
+        let xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function () {
+            if (this.readyState === 4 && this.status === 200) {
+                users = JSON.parse(this.responseText);
+                display_users();
+            }
+        };
+        xhttp.timeout = 4000;
+        xhttp.open("GET", "/my_api?users", true);
+        xhttp.send();
+    }
+
+    const chatSocket = new WebSocket(
+        'ws://'
+        + window.location.host
+        + '/ws/mainapp/'
+    );
+
+    let table = document.getElementById('main-table');
+    let users = null;
+
+    chatSocket.onmessage = function (e) {
+        const data = JSON.parse(e.data);
+
+        switch (data.message) {
+            case 'refresh':
+                refresh_users();
+                return;
+        }
+
+        let inp = JSON.parse(data.message);
+
+        let x = document.getElementById('user-' + data.username);
+        console.log(data.username);
+        if (x == null) {
+            x = document.createElement('div');
+            x.setAttribute('id', 'user-' + data.username);
+            x.innerHTML = `<p><b>${data.username}: </b><a></a></p>`;
+            document.body.append(x);
+        } else {
+            if (inp[1] === 'd_all'){
+                x.getElementsByTagName('a')[0].innerHTML = '';
+                return;
+            }
+            if (data.message === 'i_quit') {
+                x.remove();
+                return;
+            }
+        }
+
+        let user_content = x.getElementsByTagName('a')[0].innerHTML;
+        if (inp[1] === 'Backspace')
+            user_content = user_content.slice(0, user_content.length - 1);
+        else
+            user_content += inp[1];
+        x.getElementsByTagName('a')[0].innerHTML = user_content;
+    };
+
+    chatSocket.onclose = function (e) {
+        console.error('Chat socket closed unexpectedly');
+    };
+
+    document.onkeydown = function (e) {
+        if (e.key === 'Backspace')
+            chatSocket.send(JSON.stringify(['m', e.key]));
+    }
+    let x = e => console.log(e.key);
+    document.onkeypress = function (e) {
+        if (e.key === 'Delete')
+            chatSocket.send(JSON.stringify(['m', 'd_all']));
+        else if(e.key.length === 1)
+            chatSocket.send(JSON.stringify(['m', e.key]));
+    }
+</script>
+</html>
