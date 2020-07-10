@@ -1,3 +1,4 @@
-# tictactoe
-Tic-tac-toe multiplayer game made in python django
+# TicTacToe
+Multiplayer game made in python django using channels
+
 
